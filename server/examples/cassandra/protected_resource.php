@@ -1,4 +1,4 @@
-<?php
+<p>Everyone sees this!</p><?php
 
 /**
  * @file

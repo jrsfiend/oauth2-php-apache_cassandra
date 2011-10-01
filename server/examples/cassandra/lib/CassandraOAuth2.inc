@@ -4,7 +4,7 @@
 
 define("PHPCASSA_VERSION", '0.8.a.2');
 define("CASSANDRA_SERVER", "127.0.0.1:9160");
-define("CASSANDRA_KEYSPACE", "Keyspace1");
+define("CASSANDRA_KEYSPACE", "wuchubuzai");
 define("CASSANDRA_CF", "oauth");
 
 require_once dirname(__file__) . '/phpcassa-' . PHPCASSA_VERSION . '/connection.php';
@@ -75,7 +75,7 @@ class CassandraOAuth2 extends OAuth2 {
 	protected function getRedirectUri($client_id) {
 		try {
 			$client = $this->db->get('clients', array($client_id));
-			$client_info = json_decode($client[$client_id], TRUE);
+			$client_info = json_decode($client[$client_id], true);
 			if (isset($client_info['redirect_uri'])) {
 				return $client_info['redirect_uri'];
 			} else {
@@ -101,9 +101,9 @@ class CassandraOAuth2 extends OAuth2 {
 	/**
 	 * Implements OAuth2::setAccessToken().
 	 */
-	protected function setAccessToken($oauth_token, $client_id, $expires, $scope = NULL) {        
+	protected function setAccessToken($oauth_token, $client_id, $expires, $scope = NULL) {
 		try {
-			$client = $this->db->insert('tokens', array($oauth_token => json_encode(array('client_id' => $client_id, 'expires' => $expires, 'scope' => $scope))), null, $ttl=$expires);
+			$client = $this->db->insert('tokens', array($oauth_token => json_encode(array('client_id' => $client_id, 'expires' => $expires, 'scope' => $scope))));
 		} catch (Exception $e) {
 			return FALSE;
 		}		
@@ -135,7 +135,7 @@ class CassandraOAuth2 extends OAuth2 {
 	 */
 	protected function setAuthCode($code, $client_id, $redirect_uri, $expires, $scope = NULL) {
 		try { 
-			$this->db->insert('auth_codes', array($code => json_encode(array('client_id' => $client_id, 'redirect_uri' => $redirect_uri, 'expires' => $expires, 'scope' => $scope))), null, $ttl=$expires);
+			$this->db->insert('auth_codes', array($code => json_encode(array('client_id' => $client_id, 'redirect_uri' => $redirect_uri, 'expires' => $expires, 'scope' => $scope))));
 		} catch (Exception $e) {
 			return FALSE;
 		}

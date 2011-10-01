@@ -491,7 +491,7 @@ abstract class OAuth2 {
    * @ingroup oauth2_section_4
    */
   protected function getSupportedGrantTypes() {
-    return array();
+    return array("test", "test2");
   }
 
   /**
@@ -876,11 +876,13 @@ abstract class OAuth2 {
    * @ingroup oauth2_section_5
    */
   public function verifyAccessToken($scope = NULL, $exit_not_present = TRUE, $exit_invalid = TRUE, $exit_expired = TRUE, $exit_scope = TRUE, $realm = NULL) {
-    $token_param = $this->getAccessTokenParams();
+      $token_param = $this->getAccessTokenParams();
     if ($token_param === FALSE) // Access token was not provided
       return $exit_not_present ? $this->errorWWWAuthenticateResponseHeader(OAUTH2_HTTP_BAD_REQUEST, $realm, OAUTH2_ERROR_INVALID_REQUEST, 'The request is missing a required parameter, includes an unsupported parameter or parameter value, repeats the same parameter, uses more than one method for including an access token, or is otherwise malformed.', NULL, $scope) : FALSE;
     // Get the stored token data (from the implementing subclass)
     $token = $this->getAccessToken($token_param);
+    
+    echo $token["expires"];
     if ($token === NULL)
       return $exit_invalid ? $this->errorWWWAuthenticateResponseHeader(OAUTH2_HTTP_UNAUTHORIZED, $realm, OAUTH2_ERROR_INVALID_TOKEN, 'The access token provided is invalid.', NULL, $scope) : FALSE;
 
@@ -937,24 +939,21 @@ abstract class OAuth2 {
    *
    * @ingroup oauth2_section_5
    */
-  private function getAccessTokenParams() {
+ private function getAccessTokenParams() {
     $auth_header = $this->getAuthorizationHeader();
-
     if ($auth_header !== FALSE) {
       // Make sure only the auth header is set
       if (isset($_GET[OAUTH2_TOKEN_PARAM_NAME]) || isset($_POST[OAUTH2_TOKEN_PARAM_NAME]))
-        $this->errorJsonResponse(OAUTH2_HTTP_BAD_REQUEST, OAUTH2_ERROR_INVALID_REQUEST, 'Auth token found in GET or POST when token present in header');
-
-      $auth_header = trim($auth_header);
-
+        $this->errorJsonResponse(OAUTH2_HTTP_BAD_REQUEST, OAUTH2_ERROR_INVALID_REQUEST, 'Auth token found in GET or POST when token present in header');			
+      $auth_header = trim($auth_header);	
       // Make sure it's Token authorization
-      if (strcmp(substr($auth_header, 0, 5), "OAuth ") !== 0)
-        $this->errorJsonResponse(OAUTH2_HTTP_BAD_REQUEST, OAUTH2_ERROR_INVALID_REQUEST, 'Auth header found that doesn\'t start with "OAuth"');
+      if (strcmp(substr($auth_header, 0, 5), "OAuth") !== 0)
+       $this->errorJsonResponse(OAUTH2_HTTP_BAD_REQUEST, OAUTH2_ERROR_INVALID_REQUEST, 'Auth header found that doesn\'t start with "OAuth"');
 
       // Parse the rest of the header
-      if (preg_match('/\s*OAuth\s*="(.+)"/', substr($auth_header, 5), $matches) == 0 || count($matches) < 2)
+      if (preg_match('/\b(OAuth\w+)\b/', $auth_header, $matches) == 0 || count($matches) < 2)
         $this->errorJsonResponse(OAUTH2_HTTP_BAD_REQUEST, OAUTH2_ERROR_INVALID_REQUEST, 'Malformed auth header');
-
+	
       return $matches[1];
     }
 
@@ -968,7 +967,7 @@ abstract class OAuth2 {
     if (isset($_POST[OAUTH2_TOKEN_PARAM_NAME]))
       return $_POST[OAUTH2_TOKEN_PARAM_NAME];
 
-    return FALSE;
+   return FALSE; 
   }
 
   // Access token granting (Section 4).
@@ -984,33 +983,34 @@ abstract class OAuth2 {
    * @ingroup oauth2_section_4
    */
   public function grantAccessToken() {
-    $filters = array(
-      "grant_type" => array("filter" => FILTER_VALIDATE_REGEXP, "options" => array("regexp" => OAUTH2_GRANT_TYPE_REGEXP), "flags" => FILTER_REQUIRE_SCALAR),
-      "scope" => array("flags" => FILTER_REQUIRE_SCALAR),
-      "code" => array("flags" => FILTER_REQUIRE_SCALAR),
-      "redirect_uri" => array("filter" => FILTER_SANITIZE_URL),
-      "username" => array("flags" => FILTER_REQUIRE_SCALAR),
-      "password" => array("flags" => FILTER_REQUIRE_SCALAR),
-      "assertion_type" => array("flags" => FILTER_REQUIRE_SCALAR),
-      "assertion" => array("flags" => FILTER_REQUIRE_SCALAR),
-      "refresh_token" => array("flags" => FILTER_REQUIRE_SCALAR),
+
+	$input = array(
+      "refresh_token" => $_GET['refresh_token'],
+      "assertion" => $_GET['assertion'],
+      "assertion_type" => $_GET['assertion_type'],
+      "password" => $_GET['password'],
+      "username" => $_GET['username'],
+      "grant_type" => $_GET['grant_type'],
+      "redirect_uri" => $_GET['redirect_uri'],
+      "code" => $_GET['code'],
+      "scope" => $_GET['scope']
     );
 
-    $input = filter_input_array(INPUT_POST, $filters);
 
     // Grant Type must be specified.
     if (!$input["grant_type"])
-      $this->errorJsonResponse(OAUTH2_HTTP_BAD_REQUEST, OAUTH2_ERROR_INVALID_REQUEST, 'Invalid grant_type parameter or parameter missing');
+      echo $input["grant_type"];//$this->errorJsonResponse(OAUTH2_HTTP_BAD_REQUEST, OAUTH2_ERROR_INVALID_REQUEST, 'Invalid grant_type parameter or parameter missing');
 
     // Make sure we've implemented the requested grant type
-    if (!in_array($input["grant_type"], $this->getSupportedGrantTypes()))
-      $this->errorJsonResponse(OAUTH2_HTTP_BAD_REQUEST, OAUTH2_ERROR_UNSUPPORTED_GRANT_TYPE);
+
+//    if (!in_array($input["grant_type"], $this->getSupportedGrantTypes()))
+//      $this->errorJsonResponse(OAUTH2_HTTP_BAD_REQUEST, OAUTH2_ERROR_UNSUPPORTED_GRANT_TYPE);
 
     // Authorize the client
     $client = $this->getClientCredentials();
 
-    if ($this->checkClientCredentials($client[0], $client[1]) === FALSE)
-      $this->errorJsonResponse(OAUTH2_HTTP_BAD_REQUEST, OAUTH2_ERROR_INVALID_CLIENT);
+    if ($this->checkClientCredentials($client[0], $client[1]) === FALSE)   
+	 $this->errorJsonResponse(OAUTH2_HTTP_BAD_REQUEST, OAUTH2_ERROR_INVALID_CLIENT);
 
     if (!$this->checkRestrictedGrantType($client[0], $input["grant_type"]))
       $this->errorJsonResponse(OAUTH2_HTTP_BAD_REQUEST, OAUTH2_ERROR_UNAUTHORIZED_CLIENT);
@@ -1019,13 +1019,13 @@ abstract class OAuth2 {
     switch ($input["grant_type"]) {
       case OAUTH2_GRANT_TYPE_AUTH_CODE:
         if (!$input["code"] || !$input["redirect_uri"])
-          $this->errorJsonResponse(OAUTH2_HTTP_BAD_REQUEST, OAUTH2_ERROR_INVALID_REQUEST);
+	$this->errorJsonResponse(OAUTH2_HTTP_BAD_REQUEST, OAUTH2_ERROR_INVALID_REQUEST);
 
         $stored = $this->getAuthCode($input["code"]);
 
         // Ensure that the input uri starts with the stored uri
         if ($stored === NULL || (strcasecmp(substr($input["redirect_uri"], 0, strlen($stored["redirect_uri"])), $stored["redirect_uri"]) !== 0) || $client[0] != $stored["client_id"])
-          $this->errorJsonResponse(OAUTH2_HTTP_BAD_REQUEST, OAUTH2_ERROR_INVALID_GRANT);
+	$this->errorJsonResponse(OAUTH2_HTTP_BAD_REQUEST, OAUTH2_ERROR_INVALID_GRANT);
 
         if ($stored["expires"] < time())
           $this->errorJsonResponse(OAUTH2_HTTP_BAD_REQUEST, OAUTH2_ERROR_EXPIRED_TOKEN);
@@ -1033,7 +1033,7 @@ abstract class OAuth2 {
         break;
       case OAUTH2_GRANT_TYPE_USER_CREDENTIALS:
         if (!$input["username"] || !$input["password"])
-          $this->errorJsonResponse(OAUTH2_HTTP_BAD_REQUEST, OAUTH2_ERROR_INVALID_REQUEST, 'Missing parameters. "username" and "password" required');
+	$this->errorJsonResponse(OAUTH2_HTTP_BAD_REQUEST, OAUTH2_ERROR_INVALID_REQUEST, 'Missing parameters. "username" and "password" required');
 
         $stored = $this->checkUserCredentials($client[0], $input["username"], $input["password"]);
 
@@ -1071,7 +1071,7 @@ abstract class OAuth2 {
         $stored = $this->checkNoneAccess($client[0]);
 
         if ($stored === FALSE)
-          $this->errorJsonResponse(OAUTH2_HTTP_BAD_REQUEST, OAUTH2_ERROR_INVALID_REQUEST);
+         $this->errorJsonResponse(OAUTH2_HTTP_BAD_REQUEST, OAUTH2_ERROR_INVALID_REQUEST);
     }
 
     // Check scope, if provided
@@ -1119,7 +1119,14 @@ abstract class OAuth2 {
 
       return array($_POST["client_id"], NULL);
     }
+    // Try GET
+    if ($_GET && isset($_GET["client_id"])) {
+		
+      if (isset($_GET["client_secret"]))
+        return array($_GET["client_id"], $_GET["client_secret"]);
 
+      return array($_GET["client_id"], NULL);
+    }
     // No credentials were specified
     $this->errorJsonResponse(OAUTH2_HTTP_BAD_REQUEST, OAUTH2_ERROR_INVALID_CLIENT);
   }
@@ -1139,11 +1146,11 @@ abstract class OAuth2 {
    */
   public function getAuthorizeParams() {
     $filters = array(
-      "client_id" => array("filter" => FILTER_VALIDATE_REGEXP, "options" => array("regexp" => OAUTH2_CLIENT_ID_REGEXP), "flags" => FILTER_REQUIRE_SCALAR),
-      "response_type" => array("filter" => FILTER_VALIDATE_REGEXP, "options" => array("regexp" => OAUTH2_AUTH_RESPONSE_TYPE_REGEXP), "flags" => FILTER_REQUIRE_SCALAR),
-      "redirect_uri" => array("filter" => FILTER_SANITIZE_URL),
-      "state" => array("flags" => FILTER_REQUIRE_SCALAR),
-      "scope" => array("flags" => FILTER_REQUIRE_SCALAR),
+      "client_id" => $_GET['client_id'],
+      "response_type" => $_GET['response_type'],
+      "redirect_uri" => $_GET['redirect_uri'],
+      "state" => $_GET['state'],
+      "scope" => $_GET['scope']
     );
 
     $input = filter_input_array(INPUT_GET, $filters);
@@ -1404,17 +1411,13 @@ abstract class OAuth2 {
    * @ingroup oauth2_section_5
    */
   private function getAuthorizationHeader() {
-    if (array_key_exists("HTTP_AUTHORIZATION", $_SERVER))
-      return $_SERVER["HTTP_AUTHORIZATION"];
-
-    if (function_exists("apache_request_headers")) {
-      $headers = apache_request_headers();
-
-      if (array_key_exists("Authorization", $headers))
-        return $headers["Authorization"];
-    }
-
-    return FALSE;
+	$result = $this->getAuthCode($_GET['code']);
+	if (gettype($result) === "array"){
+	return 'OAuth realm="localhost" OAuth_consumer_key="' . $_GET['client_id'] . 'OAuth_token="' . $_GET['access_token'] . 'OAuth_signature_method="HMAC-SHA1" OAuth_signature="' . md5(time()) . '" OAuth_timestamp="'. time() . '" OAuth_nonce="' . time() . '" OAuth_version="2.0"';
+  }
+	else {
+		return false;
+	}
   }
 
   /**
